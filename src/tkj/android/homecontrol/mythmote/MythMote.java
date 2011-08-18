@@ -16,8 +16,6 @@
 
 package tkj.android.homecontrol.mythmote;
 
-import tkj.android.homecontrol.mythmote.LocationChangedEventListener;
-import tkj.android.homecontrol.mythmote.db.MythMoteDbHelper;
 import tkj.android.homecontrol.mythmote.db.MythMoteDbManager;
 import tkj.android.homecontrol.mythmote.keymanager.KeyBindingEntry;
 import tkj.android.homecontrol.mythmote.keymanager.KeyBindingManager;
@@ -27,13 +25,8 @@ import android.app.TabActivity;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.res.Configuration;
-import android.database.Cursor;
 import android.graphics.Color;
 import android.os.Bundle;
-import android.widget.Button;
-import android.widget.EditText;
-import android.widget.TabHost;
-import android.widget.TabHost.OnTabChangeListener;
 import android.text.Editable;
 import android.util.Log;
 import android.view.KeyEvent;
@@ -41,6 +34,10 @@ import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.View.OnClickListener;
+import android.widget.Button;
+import android.widget.EditText;
+import android.widget.TabHost;
+import android.widget.TabHost.OnTabChangeListener;
 
 public class MythMote extends TabActivity implements TabHost.TabContentFactory,
 		OnTabChangeListener, LocationChangedEventListener,
@@ -277,15 +274,15 @@ public class MythMote extends TabActivity implements TabHost.TabContentFactory,
 	public View createTabContent(String tag) {
 
 		// check which tab content to return
-		if (tag == NAME_NAV_TAB) {
+		if (tag.equals(NAME_NAV_TAB)) {
 			// get navigation tab view
 			return this.getLayoutInflater().inflate(R.layout.navigation,
 					this.getTabHost().getTabContentView(), false);
-		} else if (tag == NAME_MEDIA_TAB) {
+		} else if (tag.equals(NAME_MEDIA_TAB)) {
 			// return media tab view
 			return this.getLayoutInflater().inflate(R.layout.mediacontrol,
 					this.getTabHost().getTabContentView(), false);
-		} else if (tag == NAME_NUMPAD_TAB) {
+		} else if (tag.equals(NAME_NUMPAD_TAB)) {
 			// return number pad view
 			return this.getLayoutInflater().inflate(R.layout.numberpad,
 					this.getTabHost().getTabContentView(), false);
@@ -358,29 +355,12 @@ public class MythMote extends TabActivity implements TabHost.TabContentFactory,
 
 		// create location database adapter
 		MythMoteDbManager dbManager = new MythMoteDbManager(this);
+		sLocation = dbManager.fetchFrontendLocation(sSelected);
 
-		// open connect
-		dbManager.open();
-
-		// get the selected location information by it's ID
-		Cursor cursor = dbManager.fetchFrontendLocation(sSelected);
-
-		// make sure returned cursor is valid
-		if (cursor == null || cursor.getCount() <= 0)
+		if (sLocation == null) {
 			return false;
-		// set selected location from Cursor
-		sLocation.ID = cursor.getInt(cursor
-				.getColumnIndex(MythMoteDbHelper.KEY_ROWID));
-		sLocation.Name = cursor.getString(cursor
-				.getColumnIndex(MythMoteDbHelper.KEY_NAME));
-		sLocation.Address = cursor.getString(cursor
-				.getColumnIndex(MythMoteDbHelper.KEY_ADDRESS));
-		sLocation.Port = cursor.getInt(cursor
-				.getColumnIndex(MythMoteDbHelper.KEY_PORT));
+		}
 
-		// close cursor and db adapter
-		cursor.close();
-		dbManager.close();
 		// connect to location
 		sComm.Connect(sLocation);
 

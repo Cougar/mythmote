@@ -153,29 +153,43 @@ public class MythCom {
 		}
 	}
 
-	public void SendCommand(String jumpPoint) {
-		// send command data
-		this.sendData(String.format("%s\n", jumpPoint));
+	public String SendCommand(String command) {
+		if(this.sendData(command))
+		{
+			if(this.IsConnected())
+				return this.readData();
+			else
+			{
+				Log.e(MythMote.LOG_TAG, _status + ": Not connected on receive");
+				return null;
+			}
+		}
+		else
+		{
+			Log.e(MythMote.LOG_TAG, _status + ": Send failed");
+			return null;
+		}
 	}
 
 	public void SendJumpCommand(String jumpPoint) {
-		// send command data
-		this.sendData(String.format("jump %s\n", jumpPoint));
+		this.SendCommand(String.format("jump %s\n", jumpPoint));
 	}
 
 	public void SendKey(String key) {
-		// send command data
-		this.sendData(String.format("key %s\n", key));
+		this.SendCommand(String.format("key %s\n", key));
 	}
 
 	public void SendKey(char key) {
-		// send command data
-		this.sendData(String.format("key %s\n", key));
+		this.SendCommand(String.format("key %s\n", key));
 	}
 
-	public void SendPlaybackCmd(String cmd) {
-		// send command data
-		this.sendData(String.format("play %s\n", cmd));
+	public void SendPlayCommand(String command) {
+		this.SendCommand(String.format("play %s\n", command));
+	}
+
+	public String SendQuery(String query)
+	{
+		return SendCommand(String.format("query %s\n", query));
 	}
 
 	public void SetOnStatusChangeHandler(StatusChangedEventListener listener) {
@@ -348,29 +362,6 @@ public class MythCom {
 		});
 	}
 	
-	/** Returns the string representation of the current mythfrontend
-	 * screen location. Returns null on error **/
-	private String queryMythScreen()
-	{
-
-		if(this.sendData("query location"))
-		{
-		    if(this.IsConnected())
-		    	return this.readData();
-		    else
-		    {
-				Log.e(MythMote.LOG_TAG, _status + ": Not connected on receive");
-				return null;
-		    }
-		}
-		else
-		{
-			Log.e(MythMote.LOG_TAG, _status + ": Send failed");
-			return null;
-		}
-
-	}
-	
 	/** Creates the update timer and schedules it for the given interval.
 	 * If the timer already exists it is destroyed and recreated. */
 	private void scheduleUpdateTimer(int updateInterval)
@@ -405,7 +396,7 @@ public class MythCom {
 						if(IsConnected() && !IsConnecting())
 						{
 							//set disconnected status if nothing is returned.
-							if(queryMythScreen() == null)
+							if(SendQuery("location") == null)
 							{
 								setStatus("Disconnected", STATUS_DISCONNECTED);
 							}

@@ -371,7 +371,7 @@ public class MythMotePreferences extends PreferenceActivity {
 				// location
 				// even if the user selects the same location already selected.
 				SelectLocation(context, new LocationChangedEventListener() {
-					public void LocationChanged() {
+					public void frontendLocationChanged() {
 						// reset preference list with updated selection
 						setupPreferences(context);
 					}
@@ -412,7 +412,7 @@ public class MythMotePreferences extends PreferenceActivity {
 					SaveSelectedLocationId(context, ids[which]);
 
 					// notify that we selected a location
-					listener.LocationChanged();
+					listener.frontendLocationChanged();
 				}
 			});
 			builder.show();

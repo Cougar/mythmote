@@ -24,9 +24,6 @@
 <string name="select_str">Select</string>
 <string name="add_location_str">New Location</string>
 <string name="add_location_description_str">Create a new frontend location profile</string>
-<string name="navigation_str">Navigation</string>
-<string name="media_str">Media</string>
-<string name="numpad_str">Numbers</string>
 <string name="enable_wifi_question_str">WiFi is not enabled and is required for proper application operation. Do you want to turn WiFi on now?</string>
 <string name="enable_wifi_str">Enable Wifi</string>
 <string name="exit_app_str">Exit mythmote</string>
@@ -95,4 +92,5 @@
 <item>9000</item>
 <item>10000</item>
 </string-array>
+<string name="back_str">Back</string>
 </resources>

@@ -38,6 +38,7 @@ import android.widget.Button;
 import android.widget.EditText;
 import android.widget.TabHost;
 import android.widget.TabHost.OnTabChangeListener;
+import android.widget.TextView;
 
 public class MythMote extends TabActivity implements TabHost.TabContentFactory,
 		OnTabChangeListener, LocationChangedEventListener,
@@ -46,9 +47,14 @@ public class MythMote extends TabActivity implements TabHost.TabContentFactory,
 	public static final int SETTINGS_ID = Menu.FIRST;
 	public static final int RECONNECT_ID = Menu.FIRST + 1;
 	public static final int SELECTLOCATION_ID = Menu.FIRST + 2;
-	public static final String NAME_NAV_TAB = "TabNavigation";
-	public static final String NAME_MEDIA_TAB = "TabNMediaControl";
-	public static final String NAME_NUMPAD_TAB = "TabNumberPad";
+
+	public static final String NAME_MENU_TAB = "TabMenu";
+	public static final int INDEX_MENU_TAB = 0;
+	public static final String NAME_VIDEO_TAB = "TabVideo";
+	public static final int INDEX_VIDEO_TAB = 1;
+	public static final String NAME_LIVETV_TAB = "TabLiveTV";
+	public static final int INDEX_LIVETV_TAB = 2;
+
 	public static final String LOG_TAG = "MythMote";
 
 	private static final String KEY_VOLUME_DOWN = "[";
@@ -60,7 +66,6 @@ public class MythMote extends TabActivity implements TabHost.TabContentFactory,
 	private static MythCom sComm;
 	private static FrontendLocation sLocation = new FrontendLocation();
 	private static int sSelected = -1;
-	private static boolean sIsScreenLarge = false;
 
 	/**
 	 * Called when the activity is first created.
@@ -69,10 +74,6 @@ public class MythMote extends TabActivity implements TabHost.TabContentFactory,
 	public void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
 		this.setContentView(R.layout.main);
-
-		// determine if large screen layouts are being used
-		sIsScreenLarge = this.getResources().getString(R.string.screensize)
-				.equals("large");
 
 		if (sComm == null) {
 			// create comm class
@@ -261,10 +262,11 @@ public class MythMote extends TabActivity implements TabHost.TabContentFactory,
 		// load keybindings
 		mKeyManager.loadKeys();
 
-		// setup the media tab's send keyboard input button
-		if (sTabHost.getCurrentTabTag().equals(NAME_NUMPAD_TAB)) {
-			setupSendKeyboardInputButton();
-		}
+		// TODO
+//		// setup the number tab's send keyboard input button
+//		if (sTabHost.getCurrentTabTag().equals(NAME_NUMPAD_TAB)) {
+//			setupSendKeyboardInputButton();
+//		}
 	}
 
 	/**
@@ -274,21 +276,18 @@ public class MythMote extends TabActivity implements TabHost.TabContentFactory,
 	public View createTabContent(String tag) {
 
 		// check which tab content to return
-		if (tag.equals(NAME_NAV_TAB)) {
-			// get navigation tab view
-			return this.getLayoutInflater().inflate(R.layout.navigation,
+		if (tag.equals(NAME_MENU_TAB)) {
+			return this.getLayoutInflater().inflate(R.layout.menutab,
 					this.getTabHost().getTabContentView(), false);
-		} else if (tag.equals(NAME_MEDIA_TAB)) {
-			// return media tab view
-			return this.getLayoutInflater().inflate(R.layout.mediacontrol,
+		} else if (tag.equals(NAME_VIDEO_TAB)) {
+			return this.getLayoutInflater().inflate(R.layout.videotab,
 					this.getTabHost().getTabContentView(), false);
-		} else if (tag.equals(NAME_NUMPAD_TAB)) {
-			// return number pad view
-			return this.getLayoutInflater().inflate(R.layout.numberpad,
+		} else if (tag.equals(NAME_LIVETV_TAB)) {
+			return this.getLayoutInflater().inflate(R.layout.livetvtab,
 					this.getTabHost().getTabContentView(), false);
 		} else {
-			// default to navigation tab view
-			return this.getLayoutInflater().inflate(R.layout.navigation,
+			// default to menu tab view
+			return this.getLayoutInflater().inflate(R.layout.menutab,
 					this.getTabHost().getTabContentView(), false);
 		}
 	}
@@ -296,7 +295,7 @@ public class MythMote extends TabActivity implements TabHost.TabContentFactory,
 	/**
 	 * Called when the frontend location is changed
 	 */
-	public void LocationChanged() {
+	public void frontendLocationChanged() {
 		if (sComm.IsConnected())
 			sComm.Disconnect();
 
@@ -307,9 +306,10 @@ public class MythMote extends TabActivity implements TabHost.TabContentFactory,
 	/**
 	 * Called when MythCom status changes
 	 */
-	public void StatusChanged(String StatusMsg, int statusCode) {
-		// set titleJUMPPOINT_guidegrid
-		setTitle(StatusMsg);
+	@Override
+	public void statusChanged(String statusMsg, int statusCode) {
+		// set title
+		setTitle(statusMsg);
 
 		// change color based on status code
 		if (statusCode == MythCom.STATUS_ERROR) {
@@ -320,6 +320,47 @@ public class MythMote extends TabActivity implements TabHost.TabContentFactory,
 			setTitleColor(Color.GREEN);
 		} else if (statusCode == MythCom.STATUS_CONNECTING) {
 			setTitleColor(Color.YELLOW);
+		}
+	}
+
+	/**
+	 * Called when user's location in MythTV changes
+	 */
+	@Override
+	public void mythTvLocationChanged(String location) {
+		TextView mediaTitle = (TextView) findViewById(R.id.mediaTitle);
+		TextView mediaSubtitle = (TextView) findViewById(R.id.mediaSubtitle);
+		Button deleteButton = (Button) findViewById(R.id.ButtonDelete);
+		deleteButton.setVisibility(View.INVISIBLE);
+		if (location.startsWith("Playback Video")) {
+			String[] components = location.split(" ");
+			String time = components[2];
+			mediaTitle.setText("Playing Video");
+			mediaSubtitle.setText(time);
+			sTabHost.setCurrentTab(INDEX_VIDEO_TAB);
+		} else if (location.startsWith("Playback Recorded")) {
+			String[] components = location.split(" ");
+			String time = components[2];
+			String timeRemaining = components[4];
+			mediaTitle.setText("Playing Recording");
+			mediaSubtitle.setText(time + " of " + timeRemaining);
+			sTabHost.setCurrentTab(INDEX_VIDEO_TAB);
+		} else if (location.startsWith("Playback LiveTV")) {
+			String[] components = location.split(" ");
+			String time = components[2];
+			String timeRemaining = components[4];
+			mediaTitle.setText("Playing Live TV");
+			mediaSubtitle.setText(time + " of " + timeRemaining);
+			sTabHost.setCurrentTab(INDEX_LIVETV_TAB);
+		} else if (location.startsWith("mythvideo") || location.startsWith("playbackbox")) {
+			mediaTitle.setText(location);
+			mediaSubtitle.setText("");
+			sTabHost.setCurrentTab(INDEX_MENU_TAB);
+			deleteButton.setVisibility(View.VISIBLE);
+		} else {
+			mediaTitle.setText(location);
+			mediaSubtitle.setText("");
+			sTabHost.setCurrentTab(INDEX_MENU_TAB);
 		}
 	}
 
@@ -416,15 +457,14 @@ public class MythMote extends TabActivity implements TabHost.TabContentFactory,
 	 */
 	private void createTabs() {
 		// create tabs. Media tab is only used when large layouts are inactive
-		sTabHost.addTab(sTabHost.newTabSpec(NAME_NAV_TAB)
-				.setIndicator(this.getString(R.string.navigation_str))
+		sTabHost.addTab(sTabHost.newTabSpec(NAME_MENU_TAB)
+				.setIndicator(NAME_MENU_TAB)
 				.setContent(this));
-		if (!sIsScreenLarge)
-			sTabHost.addTab(sTabHost.newTabSpec(NAME_MEDIA_TAB)
-					.setIndicator(this.getString(R.string.media_str))
-					.setContent(this));
-		sTabHost.addTab(sTabHost.newTabSpec(NAME_NUMPAD_TAB)
-				.setIndicator(this.getString(R.string.numpad_str))
+		sTabHost.addTab(sTabHost.newTabSpec(NAME_VIDEO_TAB)
+				.setIndicator(NAME_VIDEO_TAB)
+				.setContent(this));
+		sTabHost.addTab(sTabHost.newTabSpec(NAME_LIVETV_TAB)
+				.setIndicator(NAME_LIVETV_TAB)
 				.setContent(this));
 
 		// resize tabs to remove useless space
@@ -456,5 +496,4 @@ public class MythMote extends TabActivity implements TabHost.TabContentFactory,
 		// done with pref ref
 		pref = null;
 	}
-
 }

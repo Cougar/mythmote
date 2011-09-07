@@ -21,6 +21,6 @@ import java.util.EventListener;
 /**  **/
 public interface LocationChangedEventListener extends EventListener {
 	
-	public void LocationChanged();
+	public void frontendLocationChanged();
 	
 }

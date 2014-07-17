@@ -24,14 +24,14 @@ import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.database.Cursor;
 import android.os.Bundle;
 import android.preference.CheckBoxPreference;
 import android.preference.Preference;
+import android.preference.Preference.OnPreferenceClickListener;
 import android.preference.PreferenceActivity;
 import android.preference.PreferenceCategory;
 import android.preference.PreferenceScreen;
-import android.preference.Preference.OnPreferenceClickListener;
-import android.database.Cursor;
 import android.view.Menu;
 import android.view.MenuItem;
 
@@ -301,25 +301,10 @@ public class MythMotePreferences extends PreferenceActivity {
 
 			public boolean onPreferenceClick(Preference preference) {
 				// Open location edit dialog with a location loaded
-				FrontendLocation location = new FrontendLocation();
+				MythMoteDbManager dbManager = new MythMoteDbManager(context);
+				FrontendLocation location = dbManager.fetchFrontendLocation(Long.parseLong(preference.getKey()));
 
-				location.ID = Integer.parseInt(preference.getKey());
-
-				MythMoteDbManager dbAdapter = new MythMoteDbManager(context);
-				dbAdapter.open();
-				Cursor cursor = dbAdapter.fetchFrontendLocation(location.ID);
-
-				// get column indexes
-				_idIndex = cursor.getColumnIndex(MythMoteDbHelper.KEY_ROWID);
-				_addressIndex = cursor
-						.getColumnIndex(MythMoteDbHelper.KEY_ADDRESS);
-				_nameIndex = cursor.getColumnIndex(MythMoteDbHelper.KEY_NAME);
-				_portIndex = cursor.getColumnIndex(MythMoteDbHelper.KEY_PORT);
-
-				if (cursor != null && cursor.getCount() > 0) {
-					location.Name = cursor.getString(_nameIndex);
-					location.Address = cursor.getString(_addressIndex);
-					location.Port = cursor.getInt(_portIndex);
+				if (location != null) {
 					showLocationEditDialog(context, location);
 				}
 				return false;
@@ -386,7 +371,7 @@ public class MythMotePreferences extends PreferenceActivity {
 				// location
 				// even if the user selects the same location already selected.
 				SelectLocation(context, new LocationChangedEventListener() {
-					public void LocationChanged() {
+					public void frontendLocationChanged() {
 						// reset preference list with updated selection
 						setupPreferences(context);
 					}
@@ -427,7 +412,7 @@ public class MythMotePreferences extends PreferenceActivity {
 					SaveSelectedLocationId(context, ids[which]);
 
 					// notify that we selected a location
-					listener.LocationChanged();
+					listener.frontendLocationChanged();
 				}
 			});
 			builder.show();

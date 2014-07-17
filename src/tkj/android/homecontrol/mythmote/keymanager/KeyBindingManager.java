@@ -57,6 +57,7 @@ import static tkj.android.homecontrol.mythmote.R.id.ButtonStop;
 import static tkj.android.homecontrol.mythmote.R.id.ButtonUp;
 import static tkj.android.homecontrol.mythmote.R.id.ButtonVolDown;
 import static tkj.android.homecontrol.mythmote.R.id.ButtonVolUp;
+import static tkj.android.homecontrol.mythmote.R.id.ButtonDelete;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -113,10 +114,10 @@ public class KeyBindingManager implements KeyMapBinder, OnClickListener,
 				ButtonJump1), BUTTON_JUMP_2("jump livetv", ButtonJump2), BUTTON_JUMP_3(
 				"jump playbackrecordings", ButtonJump3), BUTTON_JUMP_4(
 				"jump playmusic", ButtonJump4), BUTTON_JUMP_5(
-				"jump videogallery", ButtonJump5), BUTTON_JUMP_6(
+				"jump videolistings", ButtonJump5), BUTTON_JUMP_6(
 				"jump statusbox", ButtonJump6), BUTTON_MENU("key m", ButtonMenu), BUTTON_MUTE(
 				"key |", ButtonMute), BUTTON_VOLUME_UP("key ]", ButtonVolUp), BUTTON_VOLUME_DOWN(
-				"key [", ButtonVolDown);
+				"key [", ButtonVolDown), BUTTON_DELETE("key d", ButtonDelete);
 
 		private final String defaultCommand;
 		private final int layoutId;
@@ -226,6 +227,8 @@ public class KeyBindingManager implements KeyMapBinder, OnClickListener,
 					BUTTON_VOLUME_UP.defaultCommand, false));
 			entries.add(new KeyBindingEntry("Vol Down", BUTTON_VOLUME_DOWN,
 					BUTTON_VOLUME_DOWN.defaultCommand, false));
+			entries.add(new KeyBindingEntry("Delete", BUTTON_DELETE,
+					BUTTON_DELETE.defaultCommand, false));
 			return entries;
 		}
 	}
@@ -258,6 +261,17 @@ public class KeyBindingManager implements KeyMapBinder, OnClickListener,
 		databaseAdapter.open();
 		databaseAdapter.loadKeyMapEntries(this);
 		databaseAdapter.close();
+
+		// Make sure that all of the entries in the default list were loaded from the DB
+		for (KeyBindingEntry entry : MythKey.createDefaultList()) {
+			View v = binder.bind(entry);
+			if (!viewToEntryMap.containsKey(v)) {
+				Log.i(MythMote.LOG_TAG, "Added missing key binding for " + entry.getFriendlyName() + " to "
+						+ entry.getCommand());
+				bind(entry);
+				databaseAdapter.save(entry);
+			}
+		}
 	}
 
 	public View bind(KeyBindingEntry entry) {
@@ -297,7 +311,7 @@ public class KeyBindingManager implements KeyMapBinder, OnClickListener,
 					+ " command " + entry.getCommand());
 			
 			//send command
-			communicator.SendCommand(entry.getCommand());
+			communicator.SendCommand(entry.getCommand(), true);
 			
 			//perform haptic feedback if enabled
 			if(mHapticFeedbackEnabled){

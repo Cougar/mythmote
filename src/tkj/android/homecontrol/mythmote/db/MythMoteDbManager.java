@@ -3,14 +3,14 @@
  *
  * Licensed under the GNU General Public License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at 
+ * You may obtain a copy of the License at
  *
  *      http://www.gnu.org/licenses/old-licenses/gpl-2.0.html
  *
- * Unless required by applicable law or agreed to in writing, software 
+ * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and 
+ * See the License for the specific language governing permissions and
  * limitations under the License.
  */
 
@@ -27,6 +27,7 @@ import static tkj.android.homecontrol.mythmote.db.MythMoteDbHelper.KEY_BINDINGS_
 import static tkj.android.homecontrol.mythmote.db.MythMoteDbHelper.KEY_NAME;
 import static tkj.android.homecontrol.mythmote.db.MythMoteDbHelper.KEY_PORT;
 import static tkj.android.homecontrol.mythmote.db.MythMoteDbHelper.KEY_ROWID;
+import tkj.android.homecontrol.mythmote.FrontendLocation;
 import tkj.android.homecontrol.mythmote.R;
 import tkj.android.homecontrol.mythmote.keymanager.KeyBindingEntry;
 import tkj.android.homecontrol.mythmote.keymanager.KeyBindingManager.MythKey;
@@ -63,7 +64,7 @@ public class MythMoteDbManager {
 	 * Create a new note using the title and body provided. If the note is
 	 * successfully created return the new rowId for that note, otherwise return
 	 * a -1 to indicate failure.
-	 * 
+	 *
 	 * @param title
 	 *            the title of the note
 	 * @param body
@@ -81,7 +82,7 @@ public class MythMoteDbManager {
 
 	/**
 	 * Delete the note with the given rowId
-	 * 
+	 *
 	 * @param rowId
 	 *            id of note to delete
 	 * @return true if deleted, false otherwise
@@ -93,7 +94,7 @@ public class MythMoteDbManager {
 
 	/**
 	 * Return a Cursor over the list of all notes in the database
-	 * 
+	 *
 	 * @return Cursor over all notes
 	 */
 	public Cursor fetchAllFrontendLocations() {
@@ -104,12 +105,11 @@ public class MythMoteDbManager {
 
 	/**
 	 * Return a Cursor positioned at the note that matches the given rowId
-	 * 
-	 * @param rowId
-	 *            id of note to retrieve
-	 * @return Cursor positioned to matching note, if found
+	 *
+	 * @param rowId id of location to retrieve
+	 * @return Cursor positioned to matching id, if found
 	 */
-	public Cursor fetchFrontendLocation(long rowId) {
+	private Cursor fetchFrontendLocationCursor(long rowId) {
 		Cursor mCursor = null;
 		try {
 			mCursor = db.query(true, FRONTEND_TABLE, new String[] { KEY_ROWID,
@@ -124,6 +124,7 @@ public class MythMoteDbManager {
 			builder.setMessage(e.getLocalizedMessage());
 			builder.setNeutralButton(R.string.ok_str, new OnClickListener() {
 
+				@Override
 				public void onClick(DialogInterface dialog, int which) {
 					// TODO Auto-generated method stub
 
@@ -132,14 +133,50 @@ public class MythMoteDbManager {
 
 		}
 		return mCursor;
+	}
 
+	/**
+	 * Return a FrontendLocation record that matches the given rowId
+	 *
+	 * @param rowId id of location to retrieve
+	 * @return FrontendLocation for the matching id, if found
+	 */
+	public FrontendLocation fetchFrontendLocation(long rowId) {
+		open();
+
+		// get the selected location information by it's ID
+		Cursor cursor = fetchFrontendLocationCursor(rowId);
+
+		// make sure returned cursor is valid
+		if (cursor == null || cursor.getCount() <= 0) {
+			return null;
+		}
+
+		FrontendLocation location = new FrontendLocation();
+
+		// set selected location from Cursor
+		location.ID = cursor.getInt(cursor
+				.getColumnIndex(MythMoteDbHelper.KEY_ROWID));
+		location.Name = cursor.getString(cursor
+				.getColumnIndex(MythMoteDbHelper.KEY_NAME));
+		location.Address = cursor.getString(cursor
+				.getColumnIndex(MythMoteDbHelper.KEY_ADDRESS));
+		location.Port = cursor.getInt(cursor
+				.getColumnIndex(MythMoteDbHelper.KEY_PORT));
+
+		// close cursor and db adapter
+		cursor.close();
+
+		close();
+
+		return location;
 	}
 
 	/**
 	 * Update the note using the details provided. The note to be updated is
 	 * specified using the rowId, and it is altered to use the title and body
 	 * values passed in
-	 * 
+	 *
 	 * @param rowId
 	 *            id of note to update
 	 * @param title
@@ -173,12 +210,13 @@ public class MythMoteDbManager {
 		Log.d("KBDA", "Adding entry " + entry.getFriendlyName() + " to "
 				+ entry.getCommand());
 		boolean success = false;
-		if (entry.getRowID() != -1)
+		if (entry.getRowID() != -1) {
 			success = db.update(KEY_BINDINGS_TABLE, values,
 					MythMoteDbHelper.KEYBINDINGS_ROWID + " = ?",
 					new String[] { String.format("%d", entry.getRowID()) }) == 1;
-		else
+		} else {
 			success = db.insert(KEY_BINDINGS_TABLE, null, values) != -1;
+		}
 		close();
 		return success;
 	}
@@ -200,8 +238,9 @@ public class MythMoteDbManager {
 			builder.setMessage(e.getLocalizedMessage());
 			builder.show();
 		}
-		if (null == mCursor)
+		if (null == mCursor) {
 			return;
+		}
 		do {
 			String friendlyName = mCursor.getString(mCursor
 					.getColumnIndex(KEYBINDINGS_FRIENDLY_NAME));

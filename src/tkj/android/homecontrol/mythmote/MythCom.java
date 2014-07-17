@@ -23,8 +23,11 @@ import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.net.SocketTimeoutException;
 import java.net.UnknownHostException;
+import java.util.ArrayList;
 import java.util.EventListener;
+import java.util.List;
 import java.util.Timer;
 import java.util.TimerTask;
 
@@ -32,27 +35,26 @@ import android.app.Activity;
 import android.content.Context;
 import android.net.ConnectivityManager;
 import android.os.Handler;
+import android.util.Log;
 import android.view.Gravity;
 import android.widget.Toast;
-import android.util.Log;
 
 /** Class that handles network communication with mythtvfrontend **/
 public class MythCom {
 
 	public interface StatusChangedEventListener extends EventListener {
-
-		public void StatusChanged(String StatusMsg, int statusCode);
+		public void statusChanged(String statusMsg, int statusCode);
+		public void mythTvLocationChanged(String location);
 	}
 
 	public static final int DEFAULT_MYTH_PORT = 6546;
-	public static final int SOCKET_TIMEOUT = 2000;
-	public static final int ENABLE_WIFI = 0;
-	public static final int CANCEL = 1;
 	public static final int STATUS_DISCONNECTED = 0;
 	public static final int STATUS_CONNECTED = 1;
 	public static final int STATUS_CONNECTING = 3;
 	public static final int STATUS_ERROR = 99;
 
+	private static final int SOCKET_TIMEOUT = 2000;
+	
 	private static Timer _timer;
 	private static Toast _toast;
 	private static Socket _socket;
@@ -64,6 +66,7 @@ public class MythCom {
 	private static int _statusCode;
 	private static StatusChangedEventListener _statusListener;
 	private static FrontendLocation _frontend;
+	private static String _lastLocation;
 
 	private final Handler mHandler = new Handler();
 	private final Runnable mSocketActionComplete = new Runnable()
@@ -85,7 +88,7 @@ public class MythCom {
 	public MythCom(Activity parentActivity)
 	{
 		_parent = parentActivity;
-		_statusCode=STATUS_DISCONNECTED;
+		_statusCode = STATUS_DISCONNECTED;
 	}
 	
 	/** Connects to the given address and port. Any existing connection will be broken first **/
@@ -153,29 +156,48 @@ public class MythCom {
 		}
 	}
 
-	public void SendCommand(String jumpPoint) {
-		// send command data
-		this.sendData(String.format("%s\n", jumpPoint));
+	public synchronized List<String> SendCommand(String command, boolean okExpected) {
+		if (this.IsConnected()) {
+			this.sendData(command);
+			List<String> results = this.readResult();
+			if (okExpected) {
+				if (results.size() == 0) {
+					Log.e(MythMote.LOG_TAG, "Command " + command + " returned no results");
+					return null;
+				}
+				if (!results.get(0).equals("OK")) {
+					Log.e(MythMote.LOG_TAG, "Command " + command + " returned " + results.get(0));
+					return null;
+				}
+			}
+			return results;
+		} else {
+			Log.e(MythMote.LOG_TAG, "Unable to send command: Not connected");
+			return null;
+		}
 	}
 
 	public void SendJumpCommand(String jumpPoint) {
-		// send command data
-		this.sendData(String.format("jump %s\n", jumpPoint));
+		this.SendCommand(String.format("jump %s\n", jumpPoint), true);
+		checkMythTvLocation();
 	}
 
 	public void SendKey(String key) {
-		// send command data
-		this.sendData(String.format("key %s\n", key));
+		this.SendCommand(String.format("key %s\n", key), true);
 	}
 
 	public void SendKey(char key) {
-		// send command data
-		this.sendData(String.format("key %s\n", key));
+		this.SendCommand(String.format("key %s\n", key), true);
 	}
 
-	public void SendPlaybackCmd(String cmd) {
-		// send command data
-		this.sendData(String.format("play %s\n", cmd));
+	public void SendPlayCommand(String command) {
+		this.SendCommand(String.format("play %s\n", command), true);
+		checkMythTvLocation();
+	}
+
+	public List<String> SendQuery(String query)
+	{
+		return SendCommand(String.format("query %s\n", query), false);
 	}
 
 	public void SetOnStatusChangeHandler(StatusChangedEventListener listener) {
@@ -217,6 +239,7 @@ public class MythCom {
 				try
 				{
 					_socket.connect(new InetSocketAddress(_frontend.Address, _frontend.Port));
+					_socket.setSoTimeout(SOCKET_TIMEOUT);
 					
 					if(_socket.isConnected())
 					{
@@ -275,102 +298,102 @@ public class MythCom {
 		thread.start();
 	}
 	
-	/** Sends data to the output stream of the socket.
-	 * Attempts to reconnect socket if connection does not already exist. **/
-	private boolean sendData(String data)
+	/**
+	 * Sends data to the output stream of the socket.
+	 * Attempts to reconnect socket if connection does not already exist.
+	 */
+	private void sendData(String data)
 	{
-		if(this.IsConnected() && _outputStream != null)
-		{
-			try
-			{
-				if(!data.endsWith("\n")) 
-					data = String.format("%s\n", data);
-				
-				_outputStream.write(data);
-				_outputStream.flush();
-				return true;
-			}
-			catch (IOException e)
-			{
-				e.printStackTrace();
-				this.setStatus(e.getLocalizedMessage() + ": " + _frontend.Address , STATUS_ERROR);
-				this.Disconnect();
-				return false;
-			}
+		if (_outputStream == null) {
+			Log.e(MythMote.LOG_TAG, "Unable to send data: No outputStream available");
 		}
-		return false;
+		try {
+			// If there is anything in the inputStream, clear it before sending the command
+			if (_inputStream.ready()) {
+				readResult();
+			}
+
+			if(!data.endsWith("\n"))
+				data = String.format("%s\n", data);
+
+			_outputStream.write(data);
+			_outputStream.flush();
+		} catch (IOException ex) {
+			Log.e(MythMote.LOG_TAG, "Unable to send data", ex);
+			this.setStatus(ex.getLocalizedMessage() + ": " + _frontend.Address , STATUS_ERROR);
+			this.Disconnect();
+		}
 	}
 	
-	/** Reads data from the input stream of the socket.
-	 * Returns null if no data in received **/
-	private String readData()
+	/**
+	 * Reads all data returned from the server until the prompt.
+	 */
+	private List<String> readResult()
 	{
-		String outString = "";
-		if(this.IsConnected() && _inputStream != null )
-		{
-			
-			try 
-			{
-				if(_inputStream.ready())
-					outString =_inputStream.readLine() ;
-
-			} 
-			catch (IOException e) 
-			{
-				Log.e(MythMote.LOG_TAG, "IO Error reading data", e);
-				this.setStatus(e.getLocalizedMessage() + ": " + _frontend.Address , STATUS_ERROR);
-				this.Disconnect();
-				return null;
+		List<String> result = new ArrayList<String>();
+		if (this.IsConnected() && _inputStream != null) {
+			String line = readLine();
+			while (line != null) {
+				result.add(line);
+				line = readLine();
 			}
 		}
-		
-		if(outString!="")
-			return outString;
-		else
-		{
-			Log.e(MythMote.LOG_TAG, "Null outstring");
+
+		return result;
+	}
+
+	/**
+	 * Read a single line from the server or return null if the prompt is received.
+	 */
+	private String readLine() {
+		String outString = "";
+		char[] twoChars = new char[2];
+		try {
+			_inputStream.read(twoChars);
+			if (twoChars[0] == '#' && twoChars[1] == ' ') {
+				return null;
+			} else {
+				outString += String.valueOf(twoChars[0]) + String.valueOf(twoChars[1]) + _inputStream.readLine();
+			}
+		} catch (SocketTimeoutException stex) {
+			Log.w(MythMote.LOG_TAG, "Socket timeout while waiting for prompt");
+			return null;
+		} catch (IOException e) {
+			Log.e(MythMote.LOG_TAG, "IO Error reading data", e);
+			this.setStatus(e.getLocalizedMessage() + ": " + _frontend.Address, STATUS_ERROR);
+			this.Disconnect();
 			return null;
 		}
+		return outString;
 	}
 	
 	/** Sets _status and fires the StatusChanged event **/
-	private void setStatus(final String StatusMsg, final int code)
+	private void setStatus(final String statusMsg, final int code)
 	{
 		_parent.runOnUiThread(new Runnable(){
 
-			public void run() 
-			{
-				_status = StatusMsg;
+			public void run() {
+				_status = statusMsg;
 				if (_statusListener != null)
-					_statusListener.StatusChanged(StatusMsg, code);
+					_statusListener.statusChanged(statusMsg, code);
 			}
 
 		});
 	}
 	
-	/** Returns the string representation of the current mythfrontend
-	 * screen location. Returns null on error **/
-	private String queryMythScreen()
+	/** Sets _status and fires the StatusChanged event **/
+	private void setMythTvLocation(final String locationMsg)
 	{
+		_parent.runOnUiThread(new Runnable(){
 
-		if(this.sendData("query location"))
-		{
-		    if(this.IsConnected())
-		    	return this.readData();
-		    else
-		    {
-				Log.e(MythMote.LOG_TAG, _status + ": Not connected on receive");
-				return null;
-		    }
-		}
-		else
-		{
-			Log.e(MythMote.LOG_TAG, _status + ": Send failed");
-			return null;
-		}
+			public void run() {
+				if (_statusListener != null)
+					_statusListener.mythTvLocationChanged(locationMsg);
+			}
 
+		});
 	}
-	
+
 	/** Creates the update timer and schedules it for the given interval.
 	 * If the timer already exists it is destroyed and recreated. */
 	private void scheduleUpdateTimer(int updateInterval)
@@ -401,19 +424,7 @@ public class MythCom {
 					//Run at every timer tick
 					public void run() 
 					{
-						//only if socket is connected
-						if(IsConnected() && !IsConnecting())
-						{
-							//set disconnected status if nothing is returned.
-							if(queryMythScreen() == null)
-							{
-								setStatus("Disconnected", STATUS_DISCONNECTED);
-							}
-							else
-							{
-								setStatus(_frontend.Name + " - Connected", STATUS_CONNECTED);
-							}
-						}
+						checkMythTvLocation();
 					}
 				};
 					
@@ -424,6 +435,28 @@ public class MythCom {
 		catch(Exception ex)
 		{
 			Log.e(MythMote.LOG_TAG, "Error scheduling status update timer.", ex);
+		}
+	}
+
+	private void checkMythTvLocation() {
+		//only if socket is connected
+		if(IsConnected() && !IsConnecting())
+		{
+			List<String> queryResult = SendQuery("location");
+			//set disconnected status if nothing is returned.
+			if(queryResult == null)
+			{
+				setStatus("Disconnected", STATUS_DISCONNECTED);
+			}
+			else if (queryResult.size() > 0)
+			{
+				setStatus(_frontend.Name + " - Connected", STATUS_CONNECTED);
+				String location = queryResult.get(0);
+				if (!location.equals(_lastLocation)) {
+					setMythTvLocation(location);
+				}
+				_lastLocation = location;
+			}
 		}
 	}
 	
